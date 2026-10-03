@@ -1,5 +1,7 @@
 # Yandex Metrica for Directus
 
+![Yandex Metrica for Directus](https://raw.githubusercontent.com/altwebga/directus-extension-yandex-metrica/main/docs/screenshots/overview.png)
+
 [Русский](#русский) · [English](#english)
 
 ---
