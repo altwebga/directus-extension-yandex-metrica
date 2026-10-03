@@ -1,0 +1,55 @@
+{
+	"name": "directus-extension-yandex-metrica",
+	"description": "Яндекс Метрика для CRM (OAuth, выбор счётчика, выгрузка заказов)",
+	"icon": "analytics",
+	"version": "1.0.0",
+	"keywords": [
+		"directus",
+		"directus-extension",
+		"directus-extension-bundle"
+	],
+	"type": "module",
+	"files": [
+		"dist"
+	],
+	"directus:extension": {
+		"type": "bundle",
+		"path": {
+			"app": "dist/app.js",
+			"api": "dist/api.js"
+		},
+		"entries": [
+			{
+				"type": "module",
+				"name": "yandex-metrica",
+				"source": "src/module/index.ts"
+			},
+			{
+				"type": "endpoint",
+				"name": "metrika",
+				"source": "src/endpoint.ts"
+			},
+			{
+				"type": "hook",
+				"name": "metrika-sync",
+				"source": "src/hook.ts"
+			}
+		],
+		"host": "^12.0.0"
+	},
+	"scripts": {
+		"build": "directus-extension build",
+		"dev": "directus-extension build -w --no-minify",
+		"link": "directus-extension link",
+		"validate": "directus-extension validate",
+		"add": "directus-extension add",
+		"typecheck": "vue-tsc --noEmit"
+	},
+	"devDependencies": {
+		"@directus/extensions-sdk": "18.0.2",
+		"typescript": "^5.9.0",
+		"vue": "3.5.24",
+		"vue-tsc": "^3.1.0"
+	},
+	"license": "UNLICENSED"
+}
