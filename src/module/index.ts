@@ -6,4 +6,6 @@ export default defineModule({
 	name: 'Яндекс Метрика',
 	icon: 'analytics',
 	routes: [{ path: '', component: YandexMetricaPage }],
+	// все маршруты /metrika/* только для администратора — остальным пункт меню не показываем
+	preRegisterCheck: (user) => user.admin_access === true,
 });

@@ -58,10 +58,19 @@ async function load() {
 }
 
 async function connect() {
-	const { data } = await api.get('/metrika/auth-url');
-	window.open(data.url, '_blank');
-	awaitingCode.value = true;
-	code.value = '';
+	// вкладку открываем синхронно по клику, иначе после await её заблокирует браузер
+	const tab = window.open('', '_blank');
+	if (tab) tab.opener = null; // открытая страница не получит доступ к окну Directus
+	try {
+		const { data } = await api.get('/metrika/auth-url');
+		if (tab) tab.location.href = data.url;
+		else window.open(data.url, '_blank', 'noopener');
+		awaitingCode.value = true;
+		code.value = '';
+	} catch (e) {
+		tab?.close();
+		showFlash('danger', errText(e));
+	}
 }
 
 async function submitCode() {

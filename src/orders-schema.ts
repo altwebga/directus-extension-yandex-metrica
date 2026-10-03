@@ -64,10 +64,17 @@ export const ORDER_FIELDS: Spec[] = [
 
 const toFieldDef = ({ field, type, meta, schema }: Spec) => ({ field, type, meta: meta ?? {}, schema: schema ?? {} });
 
+/** Можно ли использовать коллекцию для заказов: пользовательская, существует в схеме */
+export const isUserCollection = (schema: any, name: unknown): name is string =>
+	typeof name === 'string' &&
+	!name.startsWith('directus_') &&
+	name !== CONNECTIONS &&
+	Object.hasOwn(schema.collections, name);
+
 /** Коллекции, которые можно выбрать: пользовательские, с таблицей в БД */
 export function listCollections(schema: any) {
 	return Object.values<any>(schema.collections)
-		.filter((c) => !c.collection.startsWith('directus_') && c.collection !== CONNECTIONS)
+		.filter((c) => isUserCollection(schema, c.collection))
 		.map((c) => ({ collection: c.collection, primary: c.primary }))
 		.sort((a, b) => a.collection.localeCompare(b.collection));
 }
@@ -76,7 +83,7 @@ export type FieldCheck = { field: string; label: string; level: Level; status: '
 
 /** Проверяет, что в коллекции есть поля, нужные для выгрузки */
 export function checkCollection(schema: any, name: string) {
-	const coll = schema.collections[name];
+	const coll = isUserCollection(schema, name) ? schema.collections[name] : null;
 	if (!coll) return { exists: false, ok: false, fields: [] as FieldCheck[], problems: ['Коллекция не найдена'] };
 
 	const fields: FieldCheck[] = ORDER_FIELDS.filter((s) => s.level !== 'extra').map((s) => {
@@ -98,8 +105,7 @@ export function checkCollection(schema: any, name: string) {
 
 /** Значения статусов: варианты из настроек поля + встречающиеся в данных */
 export async function statusValues({ database }: Ctx, schema: any, name: string) {
-	const f = schema.collections[name]?.fields.status;
-	if (!f) return [];
+	if (!isUserCollection(schema, name) || !schema.collections[name].fields.status) return [];
 	const choices: { text: string; value: string }[] = (await database('directus_fields')
 		.select('options').where({ collection: name, field: 'status' }).first()
 		.then((r: any) => {
@@ -128,8 +134,8 @@ export function suggestStatus(value: string) {
 /** Добавляет в коллекцию недостающие поля (кроме extra). Поля с неверным типом не трогает */
 export async function fixCollection({ services, getSchema, database }: Ctx, name: string) {
 	const schema = await getSchema();
+	if (!isUserCollection(schema, name)) throw new Error('Коллекция не найдена');
 	const coll = schema.collections[name];
-	if (!coll) throw new Error('Коллекция не найдена');
 	const svc = new services.FieldsService({ schema, knex: database });
 	const added: string[] = [];
 	for (const s of ORDER_FIELDS.filter((s) => s.level !== 'extra' && !coll.fields[s.field])) {

@@ -1,16 +1,28 @@
-import { API, CONNECTIONS, getConnection, getToken, metrika, type Ctx } from './metrika-client';
+import { API, CONNECTIONS, TIMEOUT, getConnection, getToken, metrika, type Ctx } from './metrika-client';
 import { checkCollection, defaultStatusMap, METRIKA_STATUSES } from './orders-schema';
 
 // Упрощённая загрузка заказов: https://yandex.ru/dev/metrika/ru/data-import/simple-orders-prep
 // Статусы Метрики: IN_PROGRESS → цель «CRM: Заказ создан», PAID → «Заказ создан» + «Заказ оплачен»,
 // CANCELLED и SPAM целей не дают. Сопоставление статусов CRM задаётся на странице модуля (status_map).
 
+// создание Intl.DateTimeFormat дорогое, а в одном запуске бывает до 50 000 заказов
+const formatters = new Map<string, Intl.DateTimeFormat>();
+const formatter = (timeZone: string) => {
+	let f = formatters.get(timeZone);
+	if (!f) {
+		f = new Intl.DateTimeFormat('ru-RU', {
+			timeZone, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+		});
+		formatters.set(timeZone, f);
+	}
+	return f;
+};
+
 /** DD.MM.YYYY HH:MM в часовом поясе счётчика */
 function fmtDate(d: string, timeZone: string) {
+	const date = new Date(d);
 	const p = Object.fromEntries(
-		new Intl.DateTimeFormat('ru-RU', {
-			timeZone, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-		}).formatToParts(new Date(d)).map((x) => [x.type, x.value]),
+		formatter(timeZone).formatToParts(Number.isNaN(date.getTime()) ? new Date() : date).map((x) => [x.type, x.value]),
 	);
 	return `${p.day}.${p.month}.${p.year} ${p.hour}:${p.minute}`;
 }
@@ -27,12 +39,12 @@ const hasIdentifier = (o: any) => !!(o.ym_client_id || o.email || normPhone(o.ph
 function toCsv(items: any[], pk: string, timeZone: string, currency: string, statusMap: Record<string, string>) {
 	const header = 'id,create_date_time,client_ids,emails,phones,order_status,revenue,cost,currency';
 	const rows = items.map((o) => {
-		const status = statusMap[o.status];
+		const status = Object.hasOwn(statusMap, o.status) ? statusMap[o.status] : undefined;
 		return [
 			o[pk],
 			fmtDate(o.date_created ?? o.date_updated ?? new Date().toISOString(), timeZone),
 			o.ym_client_id,
-			o.email?.trim().toLowerCase(),
+			o.email ? String(o.email).trim().toLowerCase() : '',
 			normPhone(o.phone),
 			METRIKA_STATUSES.includes(status as any) ? status : 'IN_PROGRESS',
 			o.revenue ?? '',
@@ -47,7 +59,9 @@ async function upload(token: string, counterId: number, csv: string) {
 	const form = new FormData();
 	form.append('file', new Blob([csv], { type: 'text/csv' }), 'orders.csv');
 	const url = `${API}/cdp/api/v1/counter/${counterId}/data/simple_orders?merge_mode=SAVE&delimiter_type=COMMA`;
-	const res = await fetch(url, { method: 'POST', headers: { Authorization: `OAuth ${token}` }, body: form });
+	const res = await fetch(url, {
+		method: 'POST', signal: AbortSignal.timeout(TIMEOUT), headers: { Authorization: `OAuth ${token}` }, body: form,
+	});
 	if (!res.ok) throw new Error(`Metrika ${res.status}: ${await res.text()}`);
 	const { uploading } = (await res.json()) as any;
 	if (uploading?.api_validation_status === 'FAILED') throw new Error(`Metrika: файл не прошёл проверку (uploading ${uploading.uploading_id})`);
@@ -78,7 +92,8 @@ export async function pendingCount(ctx: Ctx, coll: string) {
 /** Вызывается кроном: отправляет, если по расписанию пора */
 export async function runScheduled(ctx: Ctx) {
 	const c = await getConnection(ctx);
-	const hours = SCHEDULES[(c?.sync_schedule as Schedule) ?? DEFAULT_SCHEDULE] ?? SCHEDULES[DEFAULT_SCHEDULE];
+	const schedule = c?.sync_schedule && Object.hasOwn(SCHEDULES, c.sync_schedule) ? (c.sync_schedule as Schedule) : DEFAULT_SCHEDULE;
+	const hours = SCHEDULES[schedule];
 	if (!c || !hours) return;
 	// отсчёт от последней попытки: пропущенное окно (сервер был выключен) не теряется,
 	// а при ошибке повтор будет через интервал, а не каждые 5 минут

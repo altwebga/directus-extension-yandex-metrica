@@ -1,7 +1,10 @@
 import { defineEndpoint } from '@directus/extensions-sdk';
-import { REDIRECT_URI, exchangeToken, getConnection, getToken, metrika, saveConnection } from './metrika-client';
 import {
-	METRIKA_STATUSES, checkCollection, createOrdersCollection, defaultStatusMap, fixCollection, listCollections, statusValues,
+	REDIRECT_URI, exchangeToken, getConnection, getToken, metrika, oauthCredentials, revokeToken, saveConnection, yandexLogin,
+} from './metrika-client';
+import {
+	METRIKA_STATUSES, checkCollection, createOrdersCollection, defaultStatusMap, fixCollection, isUserCollection, listCollections,
+	statusValues,
 } from './orders-schema';
 import { DEFAULT_SCHEDULE, SCHEDULES, pendingCount, runSync } from './sync';
 
@@ -25,14 +28,18 @@ export default defineEndpoint({
 
 		// ссылка на авторизацию в Яндексе; код Яндекс покажет на странице verification_code
 		router.get('/auth-url', adminOnly, (_req, res) => {
-			const url = new URL('https://oauth.yandex.ru/authorize');
-			url.search = new URLSearchParams({
-				response_type: 'code',
-				client_id: env.YANDEX_CLIENT_ID,
-				redirect_uri: REDIRECT_URI,
-				force_confirm: 'yes', // даёт выбрать другой Яндекс-аккаунт
-			}).toString();
-			res.json({ url: url.toString() });
+			try {
+				const url = new URL('https://oauth.yandex.ru/authorize');
+				url.search = new URLSearchParams({
+					response_type: 'code',
+					client_id: oauthCredentials(env).client_id,
+					redirect_uri: REDIRECT_URI,
+					force_confirm: 'yes', // даёт выбрать другой Яндекс-аккаунт
+				}).toString();
+				res.json({ url: url.toString() });
+			} catch (e) {
+				fail(res, e);
+			}
 		});
 
 		// пользователь вставил код со страницы Яндекса
@@ -44,13 +51,7 @@ export default defineEndpoint({
 
 				const tokens = await exchangeToken(env, { grant_type: 'authorization_code', code });
 
-				let login = '';
-				try {
-					const info: any = await fetch('https://login.yandex.ru/info?format=json', {
-						headers: { Authorization: `OAuth ${tokens.access_token}` },
-					}).then((r) => r.json());
-					login = info.login ?? '';
-				} catch {}
+				const login = await yandexLogin(tokens.access_token);
 
 				// другой аккаунт: счётчики прежнего ему недоступны, выбор счётчика сбрасываем
 				const prev = await getConnection(ctx);
@@ -109,7 +110,9 @@ export default defineEndpoint({
 		// выбор счётчика с повторной проверкой прав
 		router.post('/connection/counter', adminOnly, async (req: any, res) => {
 			try {
-				const { counter } = await metrika(await requireToken(), `/management/v1/counter/${Number(req.body?.counter_id)}`);
+				const counterId = Number(req.body?.counter_id);
+				if (!Number.isSafeInteger(counterId) || counterId <= 0) return res.status(400).json({ error: 'Неверный номер счётчика' });
+				const { counter } = await metrika(await requireToken(), `/management/v1/counter/${counterId}`);
 				if (!['own', 'edit'].includes(counter.permission))
 					return res.status(403).json({ error: 'Нет прав на запись в этот счётчик' });
 				await saveConnection(ctx, {
@@ -127,19 +130,7 @@ export default defineEndpoint({
 		router.delete('/connection', adminOnly, async (_req, res) => {
 			try {
 				const c = await getConnection(ctx);
-				if (c?.access_token) {
-					try {
-						await fetch('https://oauth.yandex.ru/revoke_token', {
-							method: 'POST',
-							headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-							body: new URLSearchParams({
-								access_token: c.access_token,
-								client_id: env.YANDEX_CLIENT_ID,
-								client_secret: env.YANDEX_CLIENT_SECRET,
-							}),
-						});
-					} catch {}
-				}
+				if (c?.access_token) await revokeToken(env, c.access_token);
 				if (c) {
 					await saveConnection(ctx, {
 						access_token: null, refresh_token: null, expires_at: null, yandex_login: null,
@@ -159,18 +150,22 @@ export default defineEndpoint({
 				const { orders_collection, status_map, sync_schedule } = req.body ?? {};
 
 				if (sync_schedule !== undefined) {
-					if (!(sync_schedule in SCHEDULES)) return res.status(400).json({ error: `Неизвестное расписание: ${sync_schedule}` });
+					// hasOwn, а не in: иначе пройдут 'toString', 'constructor' и т. п.
+					if (typeof sync_schedule !== 'string' || !Object.hasOwn(SCHEDULES, sync_schedule))
+						return res.status(400).json({ error: `Неизвестное расписание: ${sync_schedule}` });
 					patch.sync_schedule = sync_schedule;
 				}
 
 				if (orders_collection !== undefined) {
-					if (orders_collection !== null && !(await getSchema()).collections[orders_collection])
+					if (orders_collection !== null && !isUserCollection(await getSchema(), orders_collection))
 						return res.status(400).json({ error: `Коллекция ${orders_collection} не найдена` });
 					patch.orders_collection = orders_collection;
 				}
 				if (status_map !== undefined) {
+					if (status_map !== null && (typeof status_map !== 'object' || Array.isArray(status_map)))
+						return res.status(400).json({ error: 'status_map должен быть объектом' });
 					const bad = Object.values(status_map ?? {}).find((v) => !METRIKA_STATUSES.includes(v as any));
-					if (bad) return res.status(400).json({ error: `Неизвестный статус Метрики: ${bad}` });
+					if (bad !== undefined) return res.status(400).json({ error: `Неизвестный статус Метрики: ${bad}` });
 					patch.status_map = status_map;
 				}
 				await saveConnection(ctx, patch);

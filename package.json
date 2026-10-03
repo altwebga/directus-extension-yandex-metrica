@@ -1,17 +1,30 @@
 {
 	"name": "directus-extension-yandex-metrica",
-	"description": "Яндекс Метрика для CRM (OAuth, выбор счётчика, выгрузка заказов)",
+	"description": "Send CRM orders from Directus to Yandex Metrica: OAuth connection, counter selection and scheduled order upload",
 	"icon": "analytics",
 	"version": "1.0.0",
+	"author": "Konstantin <altwebga@gmail.com>",
+	"license": "MIT",
 	"keywords": [
 		"directus",
 		"directus-extension",
-		"directus-extension-bundle"
+		"directus-extension-bundle",
+		"directus-custom-bundle",
+		"yandex",
+		"yandex-metrica",
+		"yandex-metrika",
+		"metrika",
+		"crm",
+		"analytics",
+		"offline-conversions"
 	],
 	"type": "module",
 	"files": [
 		"dist"
 	],
+	"engines": {
+		"node": ">=20"
+	},
 	"directus:extension": {
 		"type": "bundle",
 		"path": {
@@ -43,7 +56,8 @@
 		"link": "directus-extension link",
 		"validate": "directus-extension validate",
 		"add": "directus-extension add",
-		"typecheck": "vue-tsc --noEmit"
+		"typecheck": "vue-tsc --noEmit",
+		"prepublishOnly": "npm run typecheck && npm run build && npm run validate"
 	},
 	"devDependencies": {
 		"@directus/extensions-sdk": "18.0.2",
@@ -51,5 +65,7 @@
 		"vue": "3.5.24",
 		"vue-tsc": "^3.1.0"
 	},
-	"license": "UNLICENSED"
+	"publishConfig": {
+		"access": "public"
+	}
 }

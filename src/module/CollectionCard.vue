@@ -154,7 +154,7 @@ async function runCheck() {
 	if (!props.conn.orders_collection) return (check.value = null);
 	checking.value = true;
 	try {
-		const { data } = await api.get(`/metrika/collections/${props.conn.orders_collection}/check`);
+		const { data } = await api.get(`/metrika/collections/${encodeURIComponent(props.conn.orders_collection)}/check`);
 		check.value = data;
 	} catch (e) {
 		emit('flash', 'danger', errText(e));
@@ -179,7 +179,7 @@ async function selectCollection(name: string) {
 async function fix() {
 	fixing.value = true;
 	try {
-		const { data } = await api.post(`/metrika/collections/${props.conn.orders_collection}/fix`);
+		const { data } = await api.post(`/metrika/collections/${encodeURIComponent(props.conn.orders_collection!)}/fix`);
 		check.value = data;
 		emit('flash', 'success', `Добавлены поля: ${data.added.join(', ') || 'нет'}`);
 		emit('changed');
