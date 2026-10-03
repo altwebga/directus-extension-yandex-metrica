@@ -5,6 +5,14 @@
 	"version": "1.0.0",
 	"author": "Konstantin <altwebga@gmail.com>",
 	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/altwebga/directus-extension-yandex-metrica.git"
+	},
+	"homepage": "https://github.com/altwebga/directus-extension-yandex-metrica#readme",
+	"bugs": {
+		"url": "https://github.com/altwebga/directus-extension-yandex-metrica/issues"
+	},
 	"keywords": [
 		"directus",
 		"directus-extension",
