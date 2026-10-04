@@ -28,13 +28,16 @@
 
 Расширение — bundle с API-частью (endpoint и hook), которая работает с базой данных и сервисами Directus, поэтому в песочнице (sandbox) оно не запускается.
 
-**Из Marketplace.** Установка из Marketplace доступна, только если в `.env` задано:
+**Из Marketplace.** По умолчанию (`MARKETPLACE_TRUST=sandbox`) Directus скрывает в Marketplace расширения, которые не работают в песочнице, поэтому без этой настройки Yandex Metrica не найдётся в поиске. Добавьте в `.env` и перезапустите Directus:
 
 ```env
 MARKETPLACE_TRUST=all
 ```
 
 Затем: *Настройки → Marketplace → Yandex Metrica → Install*.
+
+> [!NOTE]
+> `MARKETPLACE_TRUST=all` разрешает установку из Marketplace любых расширений без песочницы. Если не хотите оставлять эту настройку включённой, установите расширение через npm или вручную.
 
 **Через npm** (Docker-образ или своя сборка):
 
@@ -68,18 +71,30 @@ METRIKA_CURRENCY=RUB
 4. Выберите коллекцию заказов или создайте новую. Недостающие поля можно добавить кнопкой.
 5. Проверьте сопоставление статусов и выберите расписание отправки.
 
+> [!WARNING]
+> Для корректной работы рекомендуется создать **новую** коллекцию заказов кнопкой в модуле: все поля будут сгенерированы автоматически с нужными типами, интерфейсами и статусами. В существующей коллекции поля с неподходящими типами не исправляются автоматически, а любое изменение записи (в том числе массовое или из других расширений) ставит заказ в очередь на повторную отправку.
+
 При первом запуске расширение создаёт скрытую служебную коллекцию `metrika_connections` (одно подключение на экземпляр Directus).
 
 ### Поля коллекции заказов
 
-| Поле | Уровень | Тип |
-|---|---|---|
-| `status` | обязательное | string |
-| `date_created` | обязательное | timestamp / dateTime |
-| `metrika_synced_at` | обязательное, служебное | timestamp / dateTime |
-| `ym_client_id`, `phone`, `email` | нужно хотя бы одно | string |
-| `revenue`, `cost` | рекомендуется | decimal / float / integer |
-| `currency` | рекомендуется | string |
+Если создаёте коллекцию вручную, используйте эти ключи полей (имена должны совпадать точно) и типы. Модуль проверяет тип по колонке «Допустимые типы», а кнопка «Добавить недостающие поля» создаёт поле с типом из колонки «Тип при создании».
+
+| Поле | Название | Уровень | Тип при создании | Допустимые типы | Настройки |
+|---|---|---|---|---|---|
+| `status` | Статус | обязательное | `string` | `string`, `text` | интерфейс Dropdown, значение по умолчанию `new` |
+| `date_created` | Дата заказа | обязательное | `timestamp` | `timestamp`, `dateTime` | Date Created (заполняется автоматически) |
+| `metrika_synced_at` | Отправлен в Метрику | обязательное, служебное | `timestamp` | `timestamp`, `dateTime` | пустое по умолчанию, скрытое, только чтение |
+| `ym_client_id` | ClientID Метрики | идентификатор | `string` | `string`, `text` | |
+| `phone` | Телефон | идентификатор | `string` | `string`, `text` | |
+| `email` | Email | идентификатор | `string` | `string`, `text` | |
+| `revenue` | Выручка | рекомендуется | `decimal` (12, 2) | `decimal`, `float`, `integer`, `bigInteger` | |
+| `cost` | Себестоимость | рекомендуется | `decimal` (12, 2) | `decimal`, `float`, `integer`, `bigInteger` | |
+| `currency` | Валюта | рекомендуется | `string` (3 символа) | `string`, `text` | код ISO 4217, по умолчанию `RUB` |
+
+- Нужно хотя бы одно поле-идентификатор (`ym_client_id`, `phone` или `email`): по нему Метрика связывает заказ с визитом.
+- Первичный ключ коллекции — любой (в новой коллекции это `id`, `integer` с автоинкрементом). Он передаётся в Метрику как ID заказа.
+- Значения `status` сопоставляются со статусами Метрики на странице модуля. Стандартные значения: `new`, `in_work`, `paid`, `canceled`, `spam`.
 
 - Пустой `metrika_synced_at` означает, что заказ ждёт отправки. Любое изменение заказа очищает это поле, и заказ уходит повторно (Метрика заменяет заказ по `id`).
 - Заказы без ClientID, телефона и email отправить нельзя: Метрике не с чем их сопоставить. Такие заказы помечаются обработанными и пропускаются.
@@ -138,13 +153,16 @@ Uploads CRM orders from a Directus collection to Yandex Metrica ([simple orders 
 
 This is a bundle with an API part (endpoint and hook) that uses the Directus database and services, so it cannot run in the sandbox.
 
-**From the Marketplace.** Installing from the Marketplace works only with:
+**From the Marketplace.** By default (`MARKETPLACE_TRUST=sandbox`) Directus hides non-sandboxed extensions from the Marketplace, so Yandex Metrica will not show up in search until you add this to `.env` and restart Directus:
 
 ```env
 MARKETPLACE_TRUST=all
 ```
 
 Then go to *Settings → Marketplace → Yandex Metrica → Install*.
+
+> [!NOTE]
+> `MARKETPLACE_TRUST=all` allows installing any non-sandboxed extension from the Marketplace. If you'd rather not keep it enabled, install via npm or manually instead.
 
 **With npm** (custom Docker image or build):
 
@@ -178,18 +196,30 @@ METRIKA_CURRENCY=RUB
 4. Select an orders collection or create a new one. Missing fields can be added with one click.
 5. Review the status mapping and choose an upload schedule.
 
+> [!WARNING]
+> For reliable operation, create a **new** orders collection with the button in the module: all fields are generated automatically with the correct types, interfaces and statuses. In an existing collection, fields with incompatible types are not fixed automatically, and any change to a record (including bulk edits or edits by other extensions) queues the order for re-upload.
+
 On first start the extension creates a hidden system collection `metrika_connections` (one connection per Directus instance).
 
 ### Orders collection fields
 
-| Field | Level | Type |
-|---|---|---|
-| `status` | required | string |
-| `date_created` | required | timestamp / dateTime |
-| `metrika_synced_at` | required, internal | timestamp / dateTime |
-| `ym_client_id`, `phone`, `email` | at least one | string |
-| `revenue`, `cost` | recommended | decimal / float / integer |
-| `currency` | recommended | string |
+If you create the collection by hand, use these field keys (names must match exactly) and types. The module validates against "Accepted types"; the "add missing fields" button creates fields with the type from "Type on creation".
+
+| Field | Label | Level | Type on creation | Accepted types | Settings |
+|---|---|---|---|---|---|
+| `status` | Status | required | `string` | `string`, `text` | Dropdown interface, default `new` |
+| `date_created` | Order date | required | `timestamp` | `timestamp`, `dateTime` | Date Created (filled automatically) |
+| `metrika_synced_at` | Sent to Metrica | required, internal | `timestamp` | `timestamp`, `dateTime` | empty by default, hidden, read-only |
+| `ym_client_id` | Metrica ClientID | identifier | `string` | `string`, `text` | |
+| `phone` | Phone | identifier | `string` | `string`, `text` | |
+| `email` | Email | identifier | `string` | `string`, `text` | |
+| `revenue` | Revenue | recommended | `decimal` (12, 2) | `decimal`, `float`, `integer`, `bigInteger` | |
+| `cost` | Cost | recommended | `decimal` (12, 2) | `decimal`, `float`, `integer`, `bigInteger` | |
+| `currency` | Currency | recommended | `string` (3 chars) | `string`, `text` | ISO 4217 code, default `RUB` |
+
+- At least one identifier field (`ym_client_id`, `phone` or `email`) is required: Metrica uses it to match the order with a visit.
+- Any primary key works (a new collection gets `id`, auto-increment `integer`). It is sent to Metrica as the order ID.
+- `status` values are mapped to Metrica statuses on the module page. Default values: `new`, `in_work`, `paid`, `canceled`, `spam`.
 
 - An empty `metrika_synced_at` means the order is waiting to be sent. Any change to an order clears it, so the order is re-sent (Metrica replaces orders by `id`).
 - Orders without a ClientID, phone or email cannot be matched by Metrica. They are marked as processed and skipped.
