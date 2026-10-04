@@ -2,7 +2,7 @@
 	"name": "directus-extension-yandex-metrica",
 	"description": "Send CRM orders from Directus to Yandex Metrica: OAuth connection, counter selection and scheduled order upload",
 	"icon": "analytics",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"author": "Konstantin <altwebga@gmail.com>",
 	"license": "MIT",
 	"repository": {
